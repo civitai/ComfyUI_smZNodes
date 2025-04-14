@@ -30,7 +30,9 @@ class EmphasisOriginal(Emphasis):
         original_mean = self.z.mean()
         self.z = self.z * self.multipliers.reshape(self.multipliers.shape + (1,)).expand(self.z.shape)
         new_mean = self.z.mean()
-        self.z = self.z * (original_mean / new_mean)
+        mean_change = (original_mean / new_mean)
+        if mean_change > 0.6 and mean_change < 1.6:
+            self.z = self.z * (mean_change)
 
 
 class EmphasisOriginalNoNorm(EmphasisOriginal):
