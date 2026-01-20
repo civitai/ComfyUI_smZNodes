@@ -102,29 +102,35 @@ def prepare_noise(latent_image, seed, noise_inds=None, device='cpu'):
         comfy.k_diffusion.sampling.default_noise_sampler = comfy.k_diffusion.sampling.default_noise_sampler_orig
     # =============================================
 
-    if noise_inds is None:
-        shape = latent_image.size()
-        if opts.randn_source == 'nv':
-            noise = torch.asarray(generator.randn(shape), dtype=latent_image.dtype, device=device)
-        else:
-            noise = torch.randn(shape, dtype=latent_image.dtype, layout=latent_image.layout, device=device, generator=generator)
-        noise = noise.to(device=device_orig)
-        return noise
+    def build_noise_for_latent(latent_tensor):
+        if noise_inds is None:
+            shape = latent_tensor.size()
+            if opts.randn_source == 'nv':
+                noise = torch.asarray(generator.randn(shape), dtype=latent_tensor.dtype, device=device)
+            else:
+                noise = torch.randn(shape, dtype=latent_tensor.dtype, layout=latent_tensor.layout, device=device, generator=generator)
+            return noise.to(device=device_orig)
 
-    unique_inds, inverse = np.unique(noise_inds, return_inverse=True)
-    noises = []
-    for i in range(unique_inds[-1]+1):
-        shape = [1] + list(latent_image.size())[1:]
-        if opts.randn_source == 'nv':
-            noise = torch.asarray(generator.randn(shape), dtype=latent_image.dtype, device=device)
-        else:
-            noise = torch.randn(shape, dtype=latent_image.dtype, layout=latent_image.layout, device=device, generator=generator)
-        noise = noise.to(device=device_orig)
-        if i in unique_inds:
-            noises.append(noise)
-    noises = [noises[i] for i in inverse]
-    noises = torch.cat(noises, axis=0)
-    return noises
+        unique_inds, inverse = np.unique(noise_inds, return_inverse=True)
+        noises = []
+        for i in range(unique_inds[-1]+1):
+            shape = [1] + list(latent_tensor.size())[1:]
+            if opts.randn_source == 'nv':
+                noise = torch.asarray(generator.randn(shape), dtype=latent_tensor.dtype, device=device)
+            else:
+                noise = torch.randn(shape, dtype=latent_tensor.dtype, layout=latent_tensor.layout, device=device, generator=generator)
+            noise = noise.to(device=device_orig)
+            if i in unique_inds:
+                noises.append(noise)
+        noises = [noises[i] for i in inverse]
+        return torch.cat(noises, axis=0)
+
+    if latent_image.is_nested:
+        import comfy.nested_tensor
+        noises = [build_noise_for_latent(t) for t in latent_image.unbind()]
+        return comfy.nested_tensor.NestedTensor(noises)
+
+    return build_noise_for_latent(latent_image)
 
 def _find_outer_instance(target:str, target_type=None, callback=None, max_len=10):
     import inspect
@@ -141,4 +147,3 @@ def _find_outer_instance(target:str, target_type=None, callback=None, max_len=10
         frame = frame.f_back
         i += 1
     return None
-
